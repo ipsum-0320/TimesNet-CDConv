@@ -115,6 +115,7 @@ class Exp_Long_Term_Forecast(Exp_Basic):
 
         loss_queue = deque()
         loss_sum = 0
+        # 每个 epoch 会走一遍全量训练集。
         for epoch in range(self.args.train_epochs):
             iter_count = 0
             train_loss = []
@@ -163,9 +164,9 @@ class Exp_Long_Term_Forecast(Exp_Basic):
                     loss = criterion(outputs, batch_y)
                     train_loss.append(loss.item())
 
-                    # 第一个 epoch 不记录，因为第一个 epoch 的 loss 变动会很大。
-                    if epoch != 0 and self.args.identification == 1:
-                        if len(loss_queue) == self.args.loss_queue_size:
+                    if self.args.identification == 1:
+                        # 第一个 epoch 不记录，因为第一个 epoch 的 loss 变动会很大。
+                        if epoch != 0 and len(loss_queue) == self.args.loss_queue_size:
                             avg_loss = loss_sum / self.args.loss_queue_size
                             if avg_loss < loss.item():
                                 # 将这个值记录在案。
