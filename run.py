@@ -20,6 +20,8 @@ if __name__ == '__main__':
     parser.add_argument('--model_id', type=str, required=True, default='TimesNet-CDConv', help='model id')
     parser.add_argument('--model', type=str, required=True, default='TimesNet',
                         help='model name, options: [TimesNet]')
+    parser.add_argument('--loss_queue_size', type=int, help='the size of loss queue')
+
 
     # data loader
     parser.add_argument('--data', type=str, required=True, default='custom', help='dataset type')

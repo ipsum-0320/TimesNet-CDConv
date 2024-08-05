@@ -31,6 +31,11 @@ if [ -n "$5" ]; then
   fi
 fi
 
+LOSS_QUEUE_SIZE=1000
+if [ -n "$6" ]; then
+  LOSS_QUEUE_SIZE=$6
+fi
+
 python -u run.py \
   --task_name long_term_forecast \
   --is_training $IS_TRAINING \
@@ -60,6 +65,7 @@ python -u run.py \
   --use_multi_gpu \
   --use_gpu True \
   --process_data $PROCESS_DATA \
-  --identification $IDENTIFICATION
+  --identification $IDENTIFICATION \
+  --loss_queue_size $LOSS_QUEUE_SIZE
 
 echo TimesNet-CDConv.sh down

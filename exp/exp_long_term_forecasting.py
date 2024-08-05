@@ -8,7 +8,10 @@ from torch import optim
 import os
 import time
 import warnings
+from collections import deque
 import numpy as np
+import csv
+import sys
 
 warnings.filterwarnings('ignore')
 
@@ -110,6 +113,8 @@ class Exp_Long_Term_Forecast(Exp_Basic):
         if self.args.use_amp:
             scaler = torch.cuda.amp.GradScaler()
 
+        loss_queue = deque()
+        loss_sum = 0
         for epoch in range(self.args.train_epochs):
             iter_count = 0
             train_loss = []
@@ -117,8 +122,8 @@ class Exp_Long_Term_Forecast(Exp_Basic):
             self.model.train()
             epoch_time = time.time()
             for i, (batch_x, batch_y, batch_x_mark, batch_y_mark, batch_original_stamp) in enumerate(train_loader):
-                # original_data = batch_original_stamp.numpy()
                 # 这里的 origin_data 在 identification 模式下将会是顺序的，不会被打乱，它一批抓取 48 个，每个比上一个延后 1 个时刻。
+                # 然后每个 for 循环顺序向后波动 48 个。
 
                 iter_count += 1
                 model_optim.zero_grad()
@@ -158,6 +163,46 @@ class Exp_Long_Term_Forecast(Exp_Basic):
                     loss = criterion(outputs, batch_y)
                     train_loss.append(loss.item())
 
+                    # 第一个 epoch 不记录，因为第一个 epoch 的 loss 变动会很大。
+                    if epoch != 0 and self.args.identification == 1:
+                        if len(loss_queue) == self.args.loss_queue_size:
+                            avg_loss = loss_sum / self.args.loss_queue_size
+                            if avg_loss < loss.item():
+                                # 将这个值记录在案。
+                                # 由于每次训练之后，模型准确度是越来越高的，因此 loss 应该逐渐走低，
+                                # 因此当某一个 loss 高于平均值时，说明这个 loss 的序列可能是超长周期的。
+                                # 但是，如果在 batch_size 的场景下，相邻序列的 loss 很接近，如果均高于平均 loss，那么可能加大这个序列的数据占比，从而影响聚类结果。
+                                # 下面是解决办法。
+                                batch_loss_max = sys.float_info.min
+                                target_index = None
+                                # 这里的 loss.item() 是当前 batch_loss 的均值。
+                                # 因为这批 batch_size 序列距离得很近，因此只需要找 batch_size 最高的一个序列（多个序列可能会形成扎堆，影响聚类结果）。
+                                for index in range(outputs.shape[0]):
+                                    single_output = outputs[index]
+                                    single_y = batch_y[index]
+                                    if criterion(single_output, single_y) > batch_loss_max:
+                                        batch_loss_max = criterion(single_output, single_y)
+                                        target_index = index
+                                original_data = batch_original_stamp.numpy()
+                                original_data = original_data[..., :].astype(int)
+                                file_exists = os.path.exists(
+                                    './clustering_data/loss-size-{}.csv'.format(self.args.loss_queue_size))
+                                with open('./clustering_data/loss-size-{}.csv'.format(self.args.loss_queue_size),
+                                          mode='a' if file_exists else 'w', newline='', encoding='utf-8') as file:
+                                    writer = csv.writer(file)
+                                    # 如果文件不存在，则写入表头
+                                    if not file_exists:
+                                        writer.writerow(['Year', 'Month', 'Day', 'Hour', 'Minute', 'Second', 'Target'])
+                                    # 无论是否存在，写入数据
+                                    writer.writerow(original_data[target_index][:180])
+                                    writer.writerow(['-', '-', '-', '-', '-', '-', '-'])
+
+                        loss_sum += loss.item()
+                        loss_queue.append(loss.item())
+                        if len(loss_queue) > self.args.loss_queue_size:
+                            loss_sum -= loss_queue.popleft()
+
+
                 if (i + 1) % 100 == 0:
                     print("\titers: {0}, epoch: {1} | loss: {2:.7f}".format(i + 1, epoch + 1, loss.item()))
                     speed = (time.time() - time_now) / iter_count
@@ -171,7 +216,8 @@ class Exp_Long_Term_Forecast(Exp_Basic):
                     scaler.step(model_optim)
                     scaler.update()
                 else:
-                    loss.backward()
+                    # 训练最终会走这里，self.args.use_amp == false。
+                    loss.backward()  # 这里会反向传播，因此会更新梯度，模型预测准确度会越来越高。
                     model_optim.step()
 
             print("Epoch: {} cost time: {}".format(epoch + 1, time.time() - epoch_time))
@@ -185,8 +231,6 @@ class Exp_Long_Term_Forecast(Exp_Basic):
                 print("Epoch: {0}, Steps: {1} | Train Loss: {2:.7f} Vali Loss: {3:.7f} Test Loss: N/A, identification "
                       "stage, no test loss.".format(
                     epoch + 1, train_steps, train_loss, vali_loss))
-
-
 
             early_stopping(vali_loss, self.model, path)
             if early_stopping.early_stop:
