@@ -11,7 +11,7 @@ def data_provider(args, flag):
     timeenc = 0 if args.embed != 'timeF' else 1
     batch_size = args.batch_size
 
-    if flag == 'test':
+    if flag == 'test' or args.identification == 1:
         shuffle_flag = False
         drop_last = True
         freq = args.freq
@@ -30,7 +30,8 @@ def data_provider(args, flag):
         target=args.target,
         timeenc=timeenc,
         freq=freq,
-        seasonal_patterns=args.seasonal_patterns
+        seasonal_patterns=args.seasonal_patterns,
+        identification=args.identification
     )
     print(flag, len(data_set))
     data_loader = DataLoader(

@@ -15,7 +15,8 @@ warnings.filterwarnings('ignore')
 class Dataset_Custom(Dataset):
     def __init__(self, root_path, flag='train', size=None,
                  features='S', train_data='train.csv', test_data='test.csv',
-                 target='OT', scale=False, timeenc=0, freq='h', seasonal_patterns=None):
+                 target='OT', scale=False, timeenc=0, freq='h',
+                 seasonal_patterns=None, identification=1):
         # size [seq_len, label_len, pred_len]
         # info
         if size == None:
@@ -40,12 +41,76 @@ class Dataset_Custom(Dataset):
         self.root_path = root_path
         self.train_data = train_data
         self.test_data = test_data
-        self.__read_data__()
+        self.identification = identification
+        if self.identification == 0:
+            self.__read_data__()
+        else:
+            self.__read_data_for_identification__()
+
+
+    def __read_data_for_identification__(self):
+        self.scaler = StandardScaler()
+        df_raw_train = pd.read_csv(os.path.join(self.root_path, self.train_data))
+        df_raw_test = pd.read_csv(os.path.join(self.root_path, self.test_data))
+        # 合并训练集和测试集。
+        df_raw = pd.concat([df_raw_train, df_raw_test], ignore_index=True)
+        num_train = int(len(df_raw) * 0.8)
+        num_vali = len(df_raw) - num_train
+        # 没有测试集
+        cols = list(df_raw.columns)
+        cols.remove(self.target)
+        cols.remove('date')
+        df_raw = df_raw[['date'] + cols + [self.target]]
+
+        border1s = [0, num_train - self.seq_len]
+        border2s = [num_train, len(df_raw)]
+        border1 = border1s[self.set_type]
+        border2 = border2s[self.set_type]
+        # 拿到边界值。
+
+        if self.features == 'M' or self.features == 'MS':
+            cols_data = df_raw.columns[1:]
+            df_data = df_raw[cols_data]
+        elif self.features == 'S':
+            df_data = df_raw[[self.target]]
+
+        if self.scale:
+            train_data = df_data[border1s[0]:border2s[0]]
+            self.scaler.fit(train_data.values)
+            data = self.scaler.transform(df_data.values)
+        else:
+            data = df_data.values
+
+        df_stamp = df_raw[['date']][border1:border2]
+        df_original_stamp = copy.deepcopy(df_stamp).values
+        df_stamp['date'] = pd.to_datetime(df_stamp.date)
+        if self.timeenc == 0:
+            df_stamp['month'] = df_stamp.date.apply(lambda row: row.month, 1)
+            df_stamp['day'] = df_stamp.date.apply(lambda row: row.day, 1)
+            df_stamp['weekday'] = df_stamp.date.apply(lambda row: row.weekday(), 1)
+            df_stamp['hour'] = df_stamp.date.apply(lambda row: row.hour, 1)
+            data_stamp = df_stamp.drop(['date'], 1).values
+        elif self.timeenc == 1:
+            data_stamp = time_features(pd.to_datetime(df_stamp['date'].values), freq=self.freq)
+            data_stamp = data_stamp.transpose(1, 0)
+
+        self.data_x = data[border1:border2]
+        self.data_y = data[border1:border2]
+        self.data_stamp = data_stamp
+        self.df_original_stamp = []
+        for i, date_str in enumerate(df_original_stamp):
+            for j, item in enumerate(date_str):
+                date_obj = datetime.strptime(item, '%Y-%m-%d %H:%M:%S')
+                self.df_original_stamp.append(
+                    [date_obj.year, date_obj.month, date_obj.day, date_obj.hour, date_obj.minute,
+                     date_obj.second, self.data_x[i][-1]])
+        self.df_original_stamp = np.array(self.df_original_stamp)
 
     def __read_data__(self):
         self.scaler = StandardScaler()
         df_raw_train = pd.read_csv(os.path.join(self.root_path, self.train_data))
         df_raw_test = pd.read_csv(os.path.join(self.root_path, self.test_data))
+        # 合并训练集和测试集。
         df_raw = pd.concat([df_raw_train, df_raw_test], ignore_index=True)
         num_train = int(len(df_raw_train) * 0.8)
         num_vali = len(df_raw_train) - num_train
@@ -96,7 +161,7 @@ class Dataset_Custom(Dataset):
             for j, item in enumerate(date_str):
                 date_obj = datetime.strptime(item, '%Y-%m-%d %H:%M:%S')
                 self.df_original_stamp.append(
-                    [date_obj.year, date_obj.month, date_obj.day, date_obj.hour, date_obj.minute, date_obj.second])
+                    [date_obj.year, date_obj.month, date_obj.day, date_obj.hour, date_obj.minute, date_obj.second, ])
         self.df_original_stamp = np.array(self.df_original_stamp)
 
     def __getitem__(self, index):

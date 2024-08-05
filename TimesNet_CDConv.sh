@@ -24,6 +24,13 @@ if [ -n "$4" ]; then
   SEQ_LEN=$4
 fi
 
+IDENTIFICATION=1 # 默认是甄别阶段
+if [ -n "$5" ]; then
+  if [ "$5" -eq 0 ] || [ "$5" -eq 1 ]; then
+    IDENTIFICATION=$5
+  fi
+fi
+
 python -u run.py \
   --task_name long_term_forecast \
   --is_training $IS_TRAINING \
@@ -52,6 +59,7 @@ python -u run.py \
   --freq t \
   --use_multi_gpu \
   --use_gpu True \
-  --process_data $PROCESS_DATA
+  --process_data $PROCESS_DATA \
+  --identification $IDENTIFICATION
 
 echo TimesNet-CDConv.sh down
