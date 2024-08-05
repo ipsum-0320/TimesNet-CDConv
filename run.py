@@ -136,7 +136,10 @@ if __name__ == '__main__':
                 args.des, ii)
 
             exp = Exp(args)  # set experiments
-            exp.set_batch_size(48)
+            if args.identification == 0:
+                exp.set_batch_size(48)
+            else:
+                exp.set_batch_size(10)
             print("current batch size is {}.".format(exp.args.batch_size))
             print('>>>>>>>start training : {}>>>>>>>>>>>>>>>>>>>>>>>>>>'.format(setting))
             exp.train(setting)
