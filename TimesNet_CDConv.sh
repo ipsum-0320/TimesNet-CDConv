@@ -31,7 +31,7 @@ if [ -n "$5" ]; then
   fi
 fi
 
-LOSS_QUEUE_SIZE=1000
+LOSS_QUEUE_SIZE=604800 # 默认是存储 7 天的 loss 数据。
 if [ -n "$6" ]; then
   LOSS_QUEUE_SIZE=$6
 fi

@@ -195,7 +195,9 @@ class Exp_Long_Term_Forecast(Exp_Basic):
                                     if not file_exists:
                                         writer.writerow(['Year', 'Month', 'Day', 'Hour', 'Minute', 'Second', 'Target'])
                                     # 无论是否存在，写入数据
-                                    writer.writerow(original_data[target_index][:180])
+                                    for indey in range(180):
+                                        # 把最大 loss 的写进去。
+                                        writer.writerow(original_data[target_index][indey])
                                     writer.writerow(['-', '-', '-', '-', '-', '-', '-'])
 
                         loss_sum += loss.item()
