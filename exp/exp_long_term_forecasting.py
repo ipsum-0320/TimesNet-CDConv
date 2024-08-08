@@ -93,10 +93,11 @@ class Exp_Long_Term_Forecast(Exp_Basic):
     def train(self, setting):
         print(torch.__version__)
         train_data, train_loader = self._get_data(flag='train')
-        vali_data, vali_loader = self._get_data(flag='val')
+        vali_data, vali_loader = None, None
         test_data, test_loader = None, None
         if self.args.identification != 1:
             test_data, test_loader = self._get_data(flag='test')
+            vali_data, vali_loader = self._get_data(flag='val')
 
         path = os.path.join(self.args.checkpoints, setting)
         if not os.path.exists(path):
@@ -195,8 +196,9 @@ class Exp_Long_Term_Forecast(Exp_Basic):
                                     if not file_exists:
                                         writer.writerow(['Year', 'Month', 'Day', 'Hour', 'Minute', 'Second', 'Target'])
                                     # 无论是否存在，写入数据
-                                    for indey in range(180):
+                                    for indey in range(original_data.shape[1]):
                                         # 把最大 loss 的写进去。
+                                        # 注意，是需要写入 210 个数据的，但是聚类算法只需要使用 180 个数据。
                                         writer.writerow(original_data[target_index][indey])
                                     writer.writerow(['-', '-', '-', '-', '-', '-', '-'])
 
@@ -231,14 +233,15 @@ class Exp_Long_Term_Forecast(Exp_Basic):
                 print("Epoch: {0}, Steps: {1} | Train Loss: {2:.7f} Vali Loss: {3:.7f} Test Loss: {4:.7f}".format(
                     epoch + 1, train_steps, train_loss, vali_loss, test_loss))
             else:
-                print("Epoch: {0}, Steps: {1} | Train Loss: {2:.7f} Vali Loss: {3:.7f} Test Loss: N/A, identification "
+                print("Epoch: {0}, Steps: {1} | Train Loss: {2:.7f} Vali Loss & Test Loss: N/A, identification "
                       "stage, no test loss.".format(
-                    epoch + 1, train_steps, train_loss, vali_loss))
+                    epoch + 1, train_steps, train_loss))
 
-            early_stopping(vali_loss, self.model, path)
-            if early_stopping.early_stop:
-                print("Early stopping")
-                break
+            if self.args.identification != 1:
+                early_stopping(vali_loss, self.model, path)
+                if early_stopping.early_stop:
+                    print("Early stopping")
+                    break
 
             adjust_learning_rate(model_optim, epoch + 1, self.args)
 

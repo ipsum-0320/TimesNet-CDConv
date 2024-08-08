@@ -52,18 +52,16 @@ class Dataset_Custom(Dataset):
         self.scaler = StandardScaler()
         df_raw_train = pd.read_csv(os.path.join(self.root_path, self.train_data))
         df_raw_test = pd.read_csv(os.path.join(self.root_path, self.test_data))
-        # 合并训练集和测试集。
+        # 删去验证集和测试集。
         df_raw = pd.concat([df_raw_train, df_raw_test], ignore_index=True)
-        num_train = int(len(df_raw) * 0.8)
-        num_vali = len(df_raw) - num_train
         # 没有测试集
         cols = list(df_raw.columns)
         cols.remove(self.target)
         cols.remove('date')
         df_raw = df_raw[['date'] + cols + [self.target]]
 
-        border1s = [0, num_train - self.seq_len]
-        border2s = [num_train, len(df_raw)]
+        border1s = [0]
+        border2s = [len(df_raw)]
         border1 = border1s[self.set_type]
         border2 = border2s[self.set_type]
         # 拿到边界值。
