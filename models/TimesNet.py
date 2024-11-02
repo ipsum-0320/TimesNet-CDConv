@@ -33,12 +33,10 @@ class TimesBlock(nn.Module):
         self.adaptive_avg_pool_2d_interperiod = nn.AdaptiveAvgPool2d((self.seq_len + self.pred_len, 1))
         self.intraperiod_net = nn.Sequential(
             nn.Dropout(0.2),
-            nn.Linear(self.linear_dim, self.linear_dim),
             nn.ReLU()
         )
         self.interperiod_net = nn.Sequential(
             nn.Dropout(0.2),
-            nn.Linear(self.linear_dim, self.linear_dim),
             nn.ReLU()
         )
 
@@ -105,6 +103,16 @@ class Model(nn.Module):
                                            configs.dropout)
         self.layer = configs.e_layers
         self.layer_norm = nn.LayerNorm(configs.d_model)
+
+        # Add the new convolution layer
+        self.conv = nn.Conv1d(in_channels=configs.d_model,
+                              out_channels=configs.d_model,
+                              kernel_size=3,
+                              padding=1)  # To keep the size same
+
+        # Add the multi-head attention layer
+        self.attention_layer = nn.MultiheadAttention(embed_dim=configs.d_model, num_heads=8)
+
         if self.task_name == 'long_term_forecast' or self.task_name == 'short_term_forecast':
             self.predict_linear = nn.Linear(
                 self.seq_len, self.pred_len + self.seq_len)
@@ -123,9 +131,23 @@ class Model(nn.Module):
         enc_out = self.enc_embedding(x_enc, x_mark_enc)  # [B,T,C]
         enc_out = self.predict_linear(enc_out.permute(0, 2, 1)).permute(
             0, 2, 1)  # align temporal dimension
+
+        # Apply convolution before TimesNet
+        enc_out = enc_out.permute(0, 2, 1)  # Switch to [B, C, T] for Conv1d
+        enc_out = self.conv(enc_out)  # Apply convolution
+        enc_out = enc_out.permute(0, 2, 1)  # Switch back to [B, T, C] after Conv1d
+
         # TimesNet
         for i in range(self.layer):
             enc_out = self.layer_norm(self.model[i](enc_out))
+
+        # 自注意力层
+        # 将 [B, T, C] 转换为 [T, B, C] 以符合 Multi head Attention 的输入要求
+        enc_out = enc_out.permute(1, 0, 2)  # [T, B, C]
+        attn_out, _ = self.attention_layer(enc_out, enc_out, enc_out)
+        # 将 [T, B, C] 转换回 [B, T, C]
+        enc_out = attn_out.permute(1, 0, 2)
+
         # porject back
         dec_out = self.projection(enc_out)
 
