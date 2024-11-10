@@ -109,7 +109,7 @@ class Dataset_Custom(Dataset):
         seq_y = self.data_y[r_begin:r_end]
         seq_x_mark = self.data_stamp[s_begin:s_end]
         seq_y_mark = self.data_stamp[r_begin:r_end]
-        seq_original_stamp = self.df_original_stamp[s_begin:r_end]
+        seq_original_stamp = self.df_original_stamp[s_begin:s_end]
 
         return seq_x, seq_y, seq_x_mark, seq_y_mark, seq_original_stamp
 

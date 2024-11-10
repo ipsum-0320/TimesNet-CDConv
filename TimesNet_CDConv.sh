@@ -19,7 +19,7 @@ if [ -n "$3" ]; then
   fi
 fi
 
-SEQ_LEN=180
+SEQ_LEN=360
 if [ -n "$4" ]; then
   SEQ_LEN=$4
 fi
@@ -40,9 +40,9 @@ python -u run.py \
   --e_layers 2 \
   --d_layers 1 \
   --factor 3 \
-  --enc_in 13 \
-  --dec_in 13 \
-  --c_out 13 \
+  --enc_in 10 \
+  --dec_in 10 \
+  --c_out 10 \
   --d_model 32 \
   --d_ff 32 \
   --top_k 5 \

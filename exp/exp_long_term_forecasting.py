@@ -8,6 +8,7 @@ from torch import optim
 import os
 import time
 import warnings
+from datetime import datetime
 import numpy as np
 
 warnings.filterwarnings('ignore')
@@ -60,18 +61,25 @@ class Exp_Long_Term_Forecast(Exp_Basic):
                 # decoder input
                 dec_inp = torch.zeros_like(batch_y[:, -self.args.pred_len:, :]).float()
                 dec_inp = torch.cat([batch_y[:, :self.args.label_len, :], dec_inp], dim=1).float().to(self.device)
+
+                # 处理时序字符串。
+                # 存储转换后的字符串，保持同样的三维结构
+                time_strings = np.empty(batch_original_stamp.shape[:2], dtype=object)
+
+                # 循环处理每个子张量
+                for i in range(batch_original_stamp.shape[0]):
+                    for j in range(batch_original_stamp.shape[1]):
+                        # 将子张量转换为列表
+                        time_list = batch_original_stamp[i, j].tolist()
+                        year, month, day, hour, minute, second = time_list
+
+                        # 将提取的信息格式化为指定的字符串格式
+                        time_str = datetime(year, month, day, hour, minute, second).strftime("%Y-%m-%d %H:%M:%S")
+                        time_strings[i, j] = time_str
+
                 # encoder - decoder
-                if self.args.use_amp:
-                    with torch.cuda.amp.autocast():
-                        if self.args.output_attention:
-                            outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
-                        else:
-                            outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
-                else:
-                    if self.args.output_attention:
-                        outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
-                    else:
-                        outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+                outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark, time_strings)
+
                 f_dim = -1 if self.args.features == 'MS' else 0
                 outputs = outputs[:, -self.args.pred_len:, f_dim:]
                 batch_y = batch_y[:, -self.args.pred_len:, f_dim:].to(self.device)
@@ -125,30 +133,29 @@ class Exp_Long_Term_Forecast(Exp_Basic):
                 dec_inp = torch.zeros_like(batch_y[:, -self.args.pred_len:, :]).float()
                 dec_inp = torch.cat([batch_y[:, :self.args.label_len, :], dec_inp], dim=1).float().to(self.device)
 
+                # 处理时序字符串。
+                # 存储转换后的字符串，保持同样的三维结构
+                time_strings = np.empty(batch_original_stamp.shape[:2], dtype=object)
+
+                # 循环处理每个子张量
+                for index in range(batch_original_stamp.shape[0]):
+                    for j in range(batch_original_stamp.shape[1]):
+                        # 将子张量转换为列表
+                        time_list = batch_original_stamp[index, j].tolist()
+                        year, month, day, hour, minute, second = time_list
+
+                        # 将提取的信息格式化为指定的字符串格式
+                        time_str = datetime(year, month, day, hour, minute, second).strftime("%Y-%m-%d %H:%M:%S")
+                        time_strings[index, j] = time_str
+
                 # encoder - decoder
-                if self.args.use_amp:
-                    with torch.cuda.amp.autocast():
-                        if self.args.output_attention:
-                            outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
-                        else:
-                            outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+                outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark, time_strings)
 
-                        f_dim = -1 if self.args.features == 'MS' else 0
-                        outputs = outputs[:, -self.args.pred_len:, f_dim:]
-                        batch_y = batch_y[:, -self.args.pred_len:, f_dim:].to(self.device)
-                        loss = criterion(outputs, batch_y)
-                        train_loss.append(loss.item())
-                else:
-                    if self.args.output_attention:
-                        outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
-                    else:
-                        outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
-
-                    f_dim = -1 if self.args.features == 'MS' else 0
-                    outputs = outputs[:, -self.args.pred_len:, f_dim:]
-                    batch_y = batch_y[:, -self.args.pred_len:, f_dim:].to(self.device)
-                    loss = criterion(outputs, batch_y)
-                    train_loss.append(loss.item())
+                f_dim = -1 if self.args.features == 'MS' else 0
+                outputs = outputs[:, -self.args.pred_len:, f_dim:]
+                batch_y = batch_y[:, -self.args.pred_len:, f_dim:].to(self.device)
+                loss = criterion(outputs, batch_y)
+                train_loss.append(loss.item())
 
                 if (i + 1) % 100 == 0:
                     print("\titers: {0}, epoch: {1} | loss: {2:.7f}".format(i + 1, epoch + 1, loss.item()))
@@ -207,19 +214,24 @@ class Exp_Long_Term_Forecast(Exp_Basic):
                 # decoder input
                 dec_inp = torch.zeros_like(batch_y[:, -self.args.pred_len:, :]).float()
                 dec_inp = torch.cat([batch_y[:, :self.args.label_len, :], dec_inp], dim=1).float().to(self.device)
-                # encoder - decoder
-                if self.args.use_amp:
-                    with torch.cuda.amp.autocast():
-                        if self.args.output_attention:
-                            outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
-                        else:
-                            outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
-                else:
-                    if self.args.output_attention:
-                        outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
 
-                    else:
-                        outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+                # 处理时序字符串。
+                # 存储转换后的字符串，保持同样的三维结构
+                time_strings = np.empty(batch_original_stamp.shape[:2], dtype=object)
+
+                # 循环处理每个子张量
+                for i in range(batch_original_stamp.shape[0]):
+                    for j in range(batch_original_stamp.shape[1]):
+                        # 将子张量转换为列表
+                        time_list = batch_original_stamp[i, j].tolist()
+                        year, month, day, hour, minute, second = time_list
+
+                        # 将提取的信息格式化为指定的字符串格式
+                        time_str = datetime(year, month, day, hour, minute, second).strftime("%Y-%m-%d %H:%M:%S")
+                        time_strings[i, j] = time_str
+
+                # encoder - decoder
+                outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark, time_strings)
 
                 f_dim = -1 if self.args.features == 'MS' else 0
                 outputs = outputs[:, -self.args.pred_len:, :]

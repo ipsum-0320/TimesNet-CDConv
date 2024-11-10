@@ -131,14 +131,12 @@ if __name__ == '__main__':
                 args.distil,
                 args.des, ii)
 
+            args.batch_size = 48
             exp = Exp(args)  # set experiments
-            exp.set_batch_size(48)
             print("current batch size is {}.".format(exp.args.batch_size))
             print('>>>>>>>start training : {}>>>>>>>>>>>>>>>>>>>>>>>>>>'.format(setting))
             exp.train(setting)
 
-            exp.set_batch_size(1)
-            print("current batch size is {}.".format(exp.args.batch_size))
             print('>>>>>>>testing : {}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'.format(setting))
             exp.test(setting)
             torch.cuda.empty_cache()
@@ -163,8 +161,8 @@ if __name__ == '__main__':
             args.distil,
             args.des, ii)
 
+        args.batch_size = 1
         exp = Exp(args)  # set experiments
-        exp.set_batch_size(1)
         print("current batch size is {}.".format(exp.args.batch_size))
         print('>>>>>>>testing : {}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'.format(setting))
         exp.test(setting, test=1)
