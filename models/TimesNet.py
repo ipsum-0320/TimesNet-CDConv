@@ -9,6 +9,8 @@ from layers.Conv_Blocks import TemporalConvNet
 import pandas as pd
 from prophet import Prophet
 from models.TrendLTSM import LSTM
+from scipy.ndimage import uniform_filter1d
+
 
 logger = logging.getLogger('cmdstanpy')
 logger.addHandler(logging.NullHandler())
@@ -151,63 +153,8 @@ class Model(nn.Module):
     def forward(self, x_enc, x_mark_enc, ___x_dec, ___x_mark_dec, date_str):
         # x_enc 是过去 360 分钟的数据，x_mark_enc 是时间特征。
         if self.task_name == 'long_term_forecast' or self.task_name == 'short_term_forecast':
-            # 数据合并
-            df_value_list = [
-                pd.DataFrame(x_enc[i].cpu().numpy(),
-                             columns=['isMonday', 'isTuesday', 'isWednesday', 'isThursday', 'isFriday',
-                                      'isSaturday', 'isSunday', 'hour', 'isRest', 'target'])
-                for i in range(x_enc.shape[0])]
-            df_date_list = [pd.DataFrame(date_str[i], columns=['date']) for i in range(date_str.shape[0])]
-
-            df_merged_list = [
-                pd.concat([df_date_list[i].reset_index(drop=True), df_value_list[i].reset_index(drop=True)], axis=1)
-                for i in range(len(df_value_list))
-            ]
-
-            device = x_mark_enc.device
-            for i in range(x_enc.shape[0]):
-                x_enc[i].to(device)
-
-            # 时序分解
-            holidays = pd.DataFrame({
-                'holiday': ['national_day'],
-                'ds': pd.to_datetime(
-                    ['2023-10-04']),
-                'lower_window': [0],  # 在节假日当天开始影响
-                'upper_window': [4]  # 在节假日后的第4天结束影响
-            })
-
             x_enc_trend = x_enc.clone()
 
-            # Prophet 无法直接处理批次数据，需要使用 for 循环来处理。
-            for i in range(len(df_merged_list)):
-                df = df_merged_list[i]
-                model = Prophet(
-                    yearly_seasonality=True,
-                    weekly_seasonality=True,
-                    daily_seasonality=True,
-                    holidays=holidays)  # 启用年、周、日周期性
-                df['date'] = pd.to_datetime(df['date'], format='%Y-%m-%d %H:%M:%S')  # 手动指定格式，以加快解析速度
-                df.rename(columns={'date': 'ds', 'target': 'y'}, inplace=True)  # 确保日期列名为 'ds'，目标列名为 'y'
-                model.fit(df)
-
-                # 分解数据
-                future = model.make_future_dataframe(periods=0)  # 不扩展未来，仅分解当前数据
-                forecast = model.predict(future)
-
-                # 提取趋势和季节性序列
-                trend_series = forecast['trend']
-                weekly_series = forecast['weekly']  # 每周季节性
-                yearly_series = forecast['yearly']  # 每年季节性
-                daily_series = forecast['daily']  # 每日季节性
-                combined_seasonal_series = weekly_series + yearly_series + daily_series
-
-                combined_seasonal_series_tensor = torch.tensor(combined_seasonal_series, dtype=x_enc[i].dtype)
-                x_enc[i][:, -1] = combined_seasonal_series_tensor[:]
-                trend_series_tensor = torch.tensor(trend_series, dtype=x_enc_trend[i].dtype)
-                x_enc_trend[i][:, -1] = trend_series_tensor[:]
-
-            # 趋势项预测
             trend_dec_out = self.lstm(x_enc_trend)
 
             # 季节项预测
