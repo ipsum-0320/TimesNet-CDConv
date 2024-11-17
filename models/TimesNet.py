@@ -1,5 +1,6 @@
 import logging
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -10,7 +11,6 @@ import pandas as pd
 from prophet import Prophet
 from models.TrendLTSM import LSTM
 from scipy.ndimage import uniform_filter1d
-
 
 logger = logging.getLogger('cmdstanpy')
 logger.addHandler(logging.NullHandler())
@@ -154,12 +154,26 @@ class Model(nn.Module):
         # x_enc 是过去 360 分钟的数据，x_mark_enc 是时间特征。
         if self.task_name == 'long_term_forecast' or self.task_name == 'short_term_forecast':
             x_enc_trend = x_enc.clone()
+            for i in range(x_enc_trend.shape[0]):
+                single_x_enc_trend = x_enc_trend[i]
+                single_x_enc_trend[:, -1] = torch.from_numpy(
+                    uniform_filter1d(single_x_enc_trend[:, -1], size=10, axis=0,
+                                     mode='reflect'))
+
+            # 提取最后一维的最后一项（原始值和趋势值）
+            original_last = x_enc[..., -1]  # 原始值的最后一项
+            trend_last = x_enc_trend[..., -1]  # 趋势值的最后一项
+
+            # 计算季节性项，仅对最后一维的最后一项相减
+            seasonal_last = original_last - trend_last
+
+            # 将季节性项赋值回原来的张量的最后一维的最后一项
+            x_enc[..., -1] = seasonal_last
 
             trend_dec_out = self.lstm(x_enc_trend)
 
             # 季节项预测
             dec_out = self.forecast(x_enc, x_mark_enc)
-            # dec_out 是未来 60 分钟的预测值。
             dec_out = dec_out[:, -self.pred_len:, :]  # [B, L, D]
             return trend_dec_out + dec_out
         return None
