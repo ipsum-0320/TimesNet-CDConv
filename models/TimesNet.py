@@ -150,7 +150,7 @@ class Model(nn.Module):
                       1, self.pred_len + self.seq_len, 1))
         return dec_out
 
-    def forward(self, x_enc, x_mark_enc, ___x_dec, ___x_mark_dec, date_str):
+    def forward(self, x_enc, x_mark_enc, ___x_dec, ___x_mark_dec):
         # x_enc 是过去 360 分钟的数据，x_mark_enc 是时间特征。
         if self.task_name == 'long_term_forecast' or self.task_name == 'short_term_forecast':
             x_enc_trend = x_enc.clone()
