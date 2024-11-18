@@ -154,11 +154,12 @@ class Model(nn.Module):
         # x_enc 是过去 360 分钟的数据，x_mark_enc 是时间特征。
         if self.task_name == 'long_term_forecast' or self.task_name == 'short_term_forecast':
             x_enc_trend = x_enc.clone()
+            device = x_enc.device
             for i in range(x_enc_trend.shape[0]):
                 single_x_enc_trend = x_enc_trend[i]
                 single_x_enc_trend[:, -1] = torch.from_numpy(
                     uniform_filter1d(single_x_enc_trend[:, -1], size=10, axis=0,
-                                     mode='reflect'))
+                                     mode='reflect').to(device))
 
             # 提取最后一维的最后一项（原始值和趋势值）
             original_last = x_enc[..., -1]  # 原始值的最后一项
