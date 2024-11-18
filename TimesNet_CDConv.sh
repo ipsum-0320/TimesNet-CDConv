@@ -40,9 +40,9 @@ python -u run.py \
   --e_layers 2 \
   --d_layers 1 \
   --factor 3 \
-  --enc_in 10 \
-  --dec_in 10 \
-  --c_out 10 \
+  --enc_in 7 \
+  --dec_in 7 \
+  --c_out 7 \
   --d_model 32 \
   --d_ff 32 \
   --top_k 5 \
