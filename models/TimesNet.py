@@ -158,8 +158,8 @@ class Model(nn.Module):
             for i in range(x_enc_trend.shape[0]):
                 single_x_enc_trend = x_enc_trend[i]
                 single_x_enc_trend[:, -1] = torch.from_numpy(
-                    uniform_filter1d(single_x_enc_trend[:, -1], size=10, axis=0,
-                                     mode='reflect').cpu()).to(device)
+                    uniform_filter1d(single_x_enc_trend[:, -1].cpu(), size=10, axis=0,
+                                     mode='reflect')).to(device)
 
             # 提取最后一维的最后一项（原始值和趋势值）
             original_last = x_enc[..., -1]  # 原始值的最后一项
