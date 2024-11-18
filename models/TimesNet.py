@@ -109,18 +109,31 @@ class Model(nn.Module):
         self.seq_len = configs.seq_len
         self.label_len = configs.label_len
         self.pred_len = configs.pred_len
+
         self.model = nn.ModuleList([TimesBlock(configs)
                                     for _ in range(configs.e_layers)])
+        self.trend_model = nn.ModuleList([TimesBlock(configs)
+                                          for _ in range(configs.e_layers)])
+
         self.enc_embedding = DataEmbedding(configs.enc_in, configs.d_model, configs.embed, configs.freq,
                                            configs.dropout)
+        self.trend_enc_embedding = DataEmbedding(configs.enc_in, configs.d_model, configs.embed, configs.freq,
+                                                 configs.dropout)
+
         self.layer = configs.e_layers
-        self.lstm = LSTM(input_size=configs.enc_in, hidden_size=configs.enc_in, num_layers=2,
-                         output_size=configs.enc_in, batch_size=configs.batch_size / 2, output_step=configs.pred_len)
+
         self.layer_norm = nn.LayerNorm(configs.d_model)
+        self.trend_layer_norm = nn.LayerNorm(configs.d_model)
+
         if self.task_name == 'long_term_forecast' or self.task_name == 'short_term_forecast':
             self.predict_linear = nn.Linear(
                 self.seq_len, self.pred_len + self.seq_len)
             self.projection = nn.Linear(
+                configs.d_model, configs.c_out, bias=True)
+
+            self.trend_predict_linear = nn.Linear(
+                self.seq_len, self.pred_len + self.seq_len)
+            self.trend_projection = nn.Linear(
                 configs.d_model, configs.c_out, bias=True)
 
     def forecast(self, x_enc, x_mark_enc):
@@ -150,15 +163,43 @@ class Model(nn.Module):
                       1, self.pred_len + self.seq_len, 1))
         return dec_out
 
-    def forward(self, x_enc, x_mark_enc, ___x_dec, ___x_mark_dec, date_str):
+    def trend_forecast(self, x_enc, x_mark_enc):
+        # Normalization from Non-stationary Transformer
+        means = x_enc.mean(1, keepdim=True).detach()
+        x_enc = x_enc - means
+        stdev = torch.sqrt(
+            torch.var(x_enc, dim=1, keepdim=True, unbiased=False) + 1e-5)
+        x_enc /= stdev
+
+        # embedding
+        enc_out = self.trend_enc_embedding(x_enc, x_mark_enc)  # [B,T,C]
+        enc_out = self.trend_predict_linear(enc_out.permute(0, 2, 1)).permute(
+            0, 2, 1)  # align temporal dimension
+        # TimesNet
+        for i in range(self.layer):
+            enc_out = self.trend_layer_norm(self.trend_model[i](enc_out))
+        # porject back
+        dec_out = self.trend_projection(enc_out)
+
+        # De-Normalization from Non-stationary Transformer
+        dec_out = dec_out * \
+                  (stdev[:, 0, :].unsqueeze(1).repeat(
+                      1, self.pred_len + self.seq_len, 1))
+        dec_out = dec_out + \
+                  (means[:, 0, :].unsqueeze(1).repeat(
+                      1, self.pred_len + self.seq_len, 1))
+        return dec_out
+
+    def forward(self, x_enc, x_mark_enc, ___x_dec, ___x_mark_dec):
         # x_enc 是过去 360 分钟的数据，x_mark_enc 是时间特征。
         if self.task_name == 'long_term_forecast' or self.task_name == 'short_term_forecast':
             x_enc_trend = x_enc.clone()
+            device = x_enc.device
             for i in range(x_enc_trend.shape[0]):
                 single_x_enc_trend = x_enc_trend[i]
                 single_x_enc_trend[:, -1] = torch.from_numpy(
-                    uniform_filter1d(single_x_enc_trend[:, -1], size=10, axis=0,
-                                     mode='reflect'))
+                    uniform_filter1d(single_x_enc_trend[:, -1].cpu(), size=10, axis=0,
+                                     mode='reflect')).to(device)
 
             # 提取最后一维的最后一项（原始值和趋势值）
             original_last = x_enc[..., -1]  # 原始值的最后一项
@@ -170,10 +211,12 @@ class Model(nn.Module):
             # 将季节性项赋值回原来的张量的最后一维的最后一项
             x_enc[..., -1] = seasonal_last
 
-            trend_dec_out = self.lstm(x_enc_trend)
+            # 周期性预测
+            trend_dec_out = self.trend_forecast(x_enc_trend, x_mark_enc)
 
             # 季节项预测
             dec_out = self.forecast(x_enc, x_mark_enc)
             dec_out = dec_out[:, -self.pred_len:, :]  # [B, L, D]
+            trend_dec_out = trend_dec_out[:, -self.pred_len:, :]
             return trend_dec_out + dec_out
         return None
